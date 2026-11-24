@@ -1,0 +1,14 @@
+[第 12 题的后续步骤。把 {{PREVIOUS_SCRIPT}} 替换成第 12 题得到的完整脚本。附件按这个顺序放：先是当前脚本的渲染图，然后是目标物体的参考图。可以重复多轮]
+
+附件中的图片顺序如下：前 1 张是当前脚本生成的模型（CURRENT generated script）的渲染图，后 1 张是目标物体（TARGET object）的参考图（GT reference）。它们分别表示当前的重建结果和想要得到的物体。
+
+以下是当前完整的 Blender 脚本：
+
+```python
+{{PREVIOUS_SCRIPT}}
+```
+
+把当前的渲染图和每一张参考图逐一对比。找出最明显的几何、比例、位置、轮廓或部件缺失方面的错误，然后修改脚本来纠正它们。保留已有的有用细节。返回修改后的完整、自包含的 Blender Python 脚本，不要只给 diff。不要用省略号，也不要省略未改动的代码。脚本之外不要输出任何说明文字。
+
+[通过 Blender MCP 的交互式进阶版：需要该基准自带的技能文件，原文见 3DHarnessBench 论文第 12 节]
+使用安装在 .agents/skills/blender-gt-reconstruction/SKILL.md 的 $blender-gt-reconstruction 技能。先阅读 SKILL.md 以及它选定的访问模式参考文档，然后再操作 Blender，完成 GT 重建。

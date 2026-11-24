@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04010c">
+<meta name="description" content="NEON RACER — a fullscreen synthwave racing game with live vapor-trail particle effects.">
+<title>NEON RACER — Vapor Velocity</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2304010c'/%3E%3Cpath d='M12 46 32 12l20 34-20-10z' fill='%2316f4ff'/%3E%3Cpath d='M20 46 32 28l12 18-12-5z' fill='%23ff2bd6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div id="game-root" aria-hidden="true"></div>
+
+<!-- ============ ATMOSPHERE / POST-FX OVERLAYS ============ -->
+<div class="fx fx--vignette" aria-hidden="true"></div>
+<div class="fx fx--scanlines" aria-hidden="true"></div>
+<div class="fx fx--grain" aria-hidden="true"></div>
+<div id="boostFx" class="boost-fx" aria-hidden="true"></div>
+<div id="hitFlash" class="hit-flash" aria-hidden="true"></div>
+
+<div class="viewport-frame" aria-hidden="true">
+  <i class="vf vf--tl"></i><i class="vf vf--tr"></i>
+  <i class="vf vf--bl"></i><i class="vf vf--br"></i>
+</div>
+
+<!-- ============ GLOBAL UTILITIES ============ -->
+<div class="utilities">
+  <button id="soundBtn" class="icon-btn" type="button" aria-label="Toggle sound" title="Sound (M)" aria-pressed="true">
+    <svg class="ico ico--sound-on" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 9.5h3.4L12 5.4v13.2L7.4 14.5H4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M15.3 8.6a4.9 4.9 0 0 1 0 6.8M18 6a8.6 8.6 0 0 1 0 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <svg class="ico ico--sound-off" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 9.5h3.4L12 5.4v13.2L7.4 14.5H4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="m15.5 9 5 6m0-6-5 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+  </button>
+  <button id="pauseBtn" class="icon-btn" type="button" aria-label="Pause game" title="Pause (P)" aria-pressed="false">
+    <svg class="ico ico--pause" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 5.5v13M16 5.5v13" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <svg class="ico ico--play" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 5.4 18.5 12 8 18.6z" fill="currentColor"/>
+    </svg>
+  </button>
+</div>
+
+<!-- ============ HUD ============ -->
+<header id="hud" class="hud" aria-hidden="true">
+  <div class="hud__top">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true"><i></i></span>
+      <span class="brand__name">NEON<em>/</em>RACER</span>
+      <span class="brand__build">VAPOR&nbsp;IV</span>
+    </div>
+
+    <div class="hud__score">
+      <div class="readout readout--score">
+        <span class="readout__label">SCORE</span>
+        <b id="score">000000</b>
+      </div>
+      <span class="readout-divider" aria-hidden="true"></span>
+      <div class="readout readout--best">
+        <span class="readout__label">BEST</span>
+        <b id="best">000000</b>
+      </div>
+    </div>
+
+    <div class="hud__status">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span>LIVE FEED</span>
+    </div>
+  </div>
+
+  <div class="hud__bottom">
+    <section class="hud-module hud-module--left" aria-label="Vehicle status">
+      <div class="module-head">
+        <span>VAPOR CHARGE</span>
+        <b id="boostPct">100%</b>
+      </div>
+      <div class="meter meter--boost">
+        <i id="boostFill"></i>
+        <span class="meter__ticks" aria-hidden="true"></span>
+      </div>
+      <div class="hull-line">
+        <span class="module-head module-head--inline">HULL</span>
+        <div id="hull" class="hull" aria-label="Hull integrity">
+          <i class="hull__cell is-on"></i><i class="hull__cell is-on"></i><i class="hull__cell is-on"></i>
+        </div>
+        <span id="hullText" class="hull-text">STABLE</span>
+      </div>
+    </section>
+
+    <section class="speed-hud" aria-label="Speed">
+      <div class="speed-hud__eyebrow">VELOCITY</div>
+      <div class="speed-hud__value"><span id="speed">000</span><small>KM/H</small></div>
+      <div class="meter meter--speed"><i id="speedFill"></i></div>
+      <div class="speed-hud__mode" id="driveMode">CRUISE</div>
+    </section>
+
+    <section class="hud-module hud-module--right" aria-label="Run data">
+      <div class="mini-stat">
+        <span>DISTANCE</span>
+        <b><span id="distance">0.00</span><small>KM</small></b>
+      </div>
+      <div class="mini-stat">
+        <span>SECTOR</span>
+        <b id="sector">01</b>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="hud-toast" role="status" aria-live="polite"></div>
+</header>
+
+<!-- ============ START / MENU ============ -->
+<section id="menuScreen" class="screen screen--menu is-active" aria-label="Main menu">
+  <div class="menu-chrome menu-chrome--left" aria-hidden="true">
+    <span>37°46'12"N</span><span>122°25'08"W</span>
+  </div>
+  <div class="menu-chrome menu-chrome--right" aria-hidden="true">
+    <span>NIGHT DISTRICT</span><span>ALT 007</span>
+  </div>
+
+  <div class="menu">
+    <div class="menu__eyebrow">
+      <span class="menu__rule"></span>
+      <span>SYNTHWAVE VELOCITY PROTOCOL</span>
+      <span class="menu__rule"></span>
+    </div>
+
+    <h1 class="hero" aria-label="Neon Racer">
+      <span class="hero__neon">NEON</span><span class="hero__racer">RACER</span>
+    </h1>
+
+    <p class="tagline">CHASE THE HORIZON <span>//</span> LEAVE A VAPOR WAKE</p>
+
+    <div class="menu__cta-row">
+      <button id="startBtn" class="cta" type="button" disabled>
+        <span class="cta__icon" aria-hidden="true">▶</span>
+        <span class="cta__text"><small>IGNITION SEQUENCE</small>START ENGINE</span>
+        <kbd class="cta__key">SPACE</kbd>
+      </button>
+    </div>
+
+    <div class="control-deck" aria-label="Controls">
+      <div class="control">
+        <span class="keys"><kbd>←</kbd><kbd>→</kbd></span>
+        <span class="control__label">STEER</span>
+      </div>
+      <div class="control">
+        <span class="keys"><kbd>W</kbd><kbd>↑</kbd></span>
+        <span class="control__label">VAPOR BOOST</span>
+      </div>
+      <div class="control">
+        <span class="keys"><kbd>S</kbd><kbd>↓</kbd></span>
+        <span class="control__label">BRAKE</span>
+      </div>
+      <div class="control">
+        <span class="keys"><kbd>P</kbd></span>
+        <span class="control__label">PAUSE</span>
+      </div>
+    </div>
+
+    <p class="touch-note">TOUCH PADS ACTIVE <span>//</span> KEEP THE VAPOR ALIVE</p>
+  </div>
+
+  <footer class="menu__footer">
+    <span id="bootStatus" class="boot-status"><i class="boot-dot" aria-hidden="true"></i><span>BOOTING RENDER CORE</span></span>
+    <span class="menu__footer-mid">ENDLESS VAPOR DISTRICT <i>//</i> EST. 2087</span>
+    <span class="menu__footer-best">LOCAL BEST <b id="menuBest">000000</b></span>
+  </footer>
+</section>
+
+<!-- ============ PAUSE ============ -->
+<section id="pauseScreen" class="screen screen--modal" aria-label="Game paused">
+  <div class="modal modal--pause">
+    <div class="modal__frame" aria-hidden="true"></div>
+    <div class="modal__eyebrow">RUN SUSPENDED <span>// TEMPORAL HOLD</span></div>
+    <h2 class="modal__title" data-text="PAUSED">PAUSED</h2>
+    <p class="modal__sub">The vapor district waits.</p>
+    <button id="resumeBtn" class="cta cta--small" type="button">
+      <span class="cta__icon" aria-hidden="true">▶</span>
+      <span class="cta__text">RESUME RUN</span>
+      <kbd class="cta__key">P</kbd>
+    </button>
+    <div class="modal__hint">PRESS <b>P</b> OR <b>ESC</b> TO RESUME</div>
+  </div>
+</section>
+
+<!-- ============ GAME OVER ============ -->
+<section id="overScreen" class="screen screen--modal screen--over" aria-label="Game over">
+  <div class="modal modal--over">
+    <div class="modal__frame" aria-hidden="true"></div>
+    <div class="modal__eyebrow"><span class="danger-dot" aria-hidden="true"></span> SIGNAL TERMINATED <span>// HULL BREACH</span></div>
+    <h2 class="modal__title modal__title--danger" data-text="SIGNAL LOST">SIGNAL LOST</h2>
+    <p class="modal__sub">Your vapor wake burns out on the grid.</p>
+
+    <div class="result-grid">
+      <div class="result">
+        <span>FINAL SCORE</span>
+        <b id="finalScore">000000</b>
+      </div>
+      <div class="result">
+        <span>DISTANCE</span>
+        <b><span id="finalDistance">0.00</span><small>KM</small></b>
+      </div>
+      <div class="result">
+        <span>TOP SPEED</span>
+        <b><span id="finalSpeed">000</span><small>KM/H</small></b>
+      </div>
+    </div>
+
+    <div id="newBest" class="new-best" hidden>★ NEW PERSONAL BEST ★</div>
+
+    <button id="restartBtn" class="cta cta--danger" type="button">
+      <span class="cta__icon" aria-hidden="true">↻</span>
+      <span class="cta__text"><small>SYSTEM REBOOT</small>RUN IT BACK</span>
+      <kbd class="cta__key">ENTER</kbd>
+    </button>
+    <div class="modal__hint">PRESS <b>ENTER</b> / <b>SPACE</b> TO RETRY</div>
+  </div>
+</section>
+
+<!-- ============ COUNTDOWN ============ -->
+<div id="countdown" class="countdown" aria-hidden="true">
+  <div class="countdown__ring" aria-hidden="true"></div>
+  <div id="countdownNum" class="countdown__num">3</div>
+  <div class="countdown__caption">VAPOR DRIVE ENGAGED</div>
+</div>
+
+<!-- ============ TOUCH CONTROLS ============ -->
+<div id="touchControls" class="touch-controls" aria-hidden="true">
+  <div class="touch-steer">
+    <button id="touchLeft" class="touch-btn" type="button" aria-label="Steer left">◀</button>
+    <button id="touchRight" class="touch-btn" type="button" aria-label="Steer right">▶</button>
+  </div>
+  <div class="touch-actions">
+    <button id="touchBrake" class="touch-btn touch-btn--small" type="button" aria-label="Brake">BRK</button>
+    <button id="touchBoost" class="touch-btn touch-btn--boost" type="button" aria-label="Boost">BOOST</button>
+  </div>
+</div>
+
+<!-- ============ FALLBACK ============ -->
+<div id="errorScreen" class="error-screen" hidden>
+  <div class="error-card">
+    <span class="error-card__code">ERR_RENDER_CORE_0x07</span>
+    <h2>NO SIGNAL</h2>
+    <p>This experience needs WebGL. Please try a modern browser with hardware acceleration enabled.</p>
+    <button class="cta cta--small" type="button" onclick="location.reload()"><span class="cta__text">RETRY BOOT</span></button>
+  </div>
+</div>
+
+<noscript>
+  <div class="noscript">NEON RACER needs JavaScript enabled to ignite its engine.</div>
+</noscript>
+
+<!-- Self-contained classic bundle: Three.js + game. Works straight from disk. -->
+<script src="./neon-racer.bundle.js" onerror="window.__NEON_SCRIPT_ERROR__=true"></script>
+<script>
+(function () {
+  'use strict';
+  function showOffline() {
+    if (window.__NEON_READY__) return;
+    var status = document.getElementById('bootStatus');
+    if (status) {
+      status.classList.remove('is-ready');
+      var label = status.querySelector('span');
+      if (label) label.textContent = 'RENDER CORE OFFLINE';
+    }
+    var screen = document.getElementById('errorScreen');
+    if (!screen || !screen.hidden) return;
+    screen.hidden = false;
+    var message = screen.querySelector('p');
+    if (message) {
+      message.textContent = 'The game engine could not start. Make sure neon-racer.bundle.js is present next to index.html, then reload. If your browser blocks local files, run a local server (see README.md).';
+    }
+  }
+  window.addEventListener('error', function (event) {
+    if (event.target && event.target.tagName === 'SCRIPT') showOffline();
+  }, true);
+  window.setTimeout(function () {
+    if (!window.__NEON_READY__) showOffline();
+  }, 9000);
+})();
+</script>
+</body>
+</html>

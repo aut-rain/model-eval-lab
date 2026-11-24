@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+<title>Pelican on a Bicycle · raw WebGL</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#ffe9c4}
+  #c{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none;cursor:grab}
+  #c:active{cursor:grabbing}
+  #hud{position:fixed;left:18px;top:16px;pointer-events:none;user-select:none;
+       font-family:"Avenir Next",system-ui,-apple-system,"Segoe UI",sans-serif;color:#26333d}
+  #hud h1{margin:0;font-size:21px;font-weight:700;letter-spacing:.3px;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+  #hud p{margin:5px 0 0;font-size:12px;opacity:.72;text-shadow:0 1px 0 rgba(255,255,255,.45)}
+  #err{display:none;position:fixed;left:18px;right:18px;bottom:18px;background:#b3261e;color:#fff;
+       padding:10px 14px;border-radius:8px;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap;z-index:10}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <h1>&#128694; Pelican on a Bicycle</h1>
+  <p>hand-rolled WebGL &middot; no libraries &mdash; drag to orbit, scroll / pinch to zoom</p>
+</div>
+<div id="err"></div>
+<script>
+(function(){
+'use strict';
+const errBox=document.getElementById('err');
+function fail(m){errBox.textContent='\u26a0 '+m;errBox.style.display='block';}
+window.addEventListener('error',e=>fail(e.message||'Script error'));
+
+const canvas=document.getElementById('c');
+const gl=canvas.getContext('webgl',{antialias:true,alpha:false})||canvas.getContext('experimental-webgl',{antialias:true,alpha:false});
+if(!gl){fail('WebGL is not available in this browser.');return;}
+
+/* ================= tiny math (column-major mat4) ================= */
+function m4(){return new Float32Array(16);}
+const IDENT=m4();IDENT[0]=IDENT[5]=IDENT[10]=IDENT[15]=1;
+const T3=m4(),T5=m4(),T6=m4(),E1=m4(),E2=m4(),ER=m4(),RXm=m4(),RYm=m4(),RZm=m4(),W1=m4(),INVT=m4(),VPm=m4(),PROJ=m4(),VIEW=m4();
+const N3=new Float32Array(9);
+const CPL=[[1,2,3],[0,2,3],[0,1,3],[0,1,2]];
+
+function m4Ident(o){o.fill(0);o[0]=o[5]=o[10]=o[15]=1;return o;}
+function m4Mul(o,a,b){ /* o = a*b ; o must not alias a/b */
+  for(let c=0;c<4;c++){
+    const b0=b[c*4],b1=b[c*4+1],b2=b[c*4+2],b3=b[c*4+3];
+    T6[c*4]  =a[0]*b0+a[4]*b1+a[8]*b2 +a[12]*b3;
+    T6[c*4+1]=a[1]*b0+a[5]*b1+a[9]*b2 +a[13]*b3;
+    T6[c*4+2]=a[2]*b0+a[6]*b1+a[10]*b2+a[14]*b3;
+    T6[c*4+3]=a[3]*b0+a[7]*b1+a[11]*b2+a[15]*b3;
+  }
+  o.set(T6);return o;
+}
+function rotXm(o,a){const c=Math.cos(a),s=Math.sin(a);o.set([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);return o;}
+function rotYm(o,a){const c=Math.cos(a),s=Math.sin(a);o.set([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);return o;}
+function rotZm(o,a){const c=Math.cos(a),s=Math.sin(a);o.set([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);return o;}
+function eulerRot(o,x,y,z){ /* R = Rz*Ry*Rx */
+  rotXm(RXm,x);rotYm(RYm,y);rotZm(RZm,z);
+  m4Mul(E2,RYm,RXm);m4Mul(E1,RZm,E2);
+  o.set(E1);return o;
+}
+function m4AxisAngle(o,x,y,z,a){ /* (x,y,z) unit axis (Rodrigues) */
+  const c=Math.cos(a),s=Math.sin(a),t=1-c;
+  o[0]=t*x*x+c;   o[4]=t*x*y-s*z; o[8]=t*x*z+s*y;  o[12]=0;
+  o[1]=t*x*y+s*z; o[5]=t*y*y+c;   o[9]=t*y*z-s*x;  o[13]=0;
+  o[2]=t*x*z-s*y; o[6]=t*y*z+s*x; o[10]=t*z*z+c;   o[14]=0;
+  o[3]=0;o[7]=0;o[11]=0;o[15]=1;return o;
+}
+function m4Persp(o,fovy,aspect,near,far){
+  const f=1/Math.tan(fovy/2),nf=1/(near-far);
+  o.set([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+  return o;
+}
+function m4LookAt(o,eye,ctr,up){
+  let zx=eye[0]-ctr[0],zy=eye[1]-ctr[1],zz=eye[2]-ctr[2];
+  let l=Math.hypot(zx,zy,zz)||1;zx/=l;zy/=l;zz/=l;
+  let xx=up[1]*zz-up[2]*zy,xy=up[2]*zx-up[0]*zz,xz=up[0]*zy-up[1]*zx;
+  l=Math.hypot(xx,xy,xz)||1;xx/=l;xy/=l;xz/=l;
+  const yx=zy*xz-zz*xy,yy=zz*xx-zx*xz,yz=zx*xy-zy*xx;
+  o[0]=xx;o[1]=yx;o[2]=zx;o[3]=0;
+  o[4]=xy;o[5]=yy;o[6]=zy;o[7]=0;
+  o[8]=xz;o[9]=yz;o[10]=zz;o[11]=0;
+  o[12]=-(xx*eye[0]+xy*eye[1]+xz*eye[2]);
+  o[13]=-(yx*eye[0]+yy*eye[1]+yz*eye[2]);
+  o[14]=-(zx*eye[0]+zy*eye[1]+zz*eye[2]);
+  o[15]=1;return o;
+}
+function m4Invert(o,m){ /* general 4x4 via cofactors */
+  const g=(r,c)=>m[c*4+r];
+  function det3(r0,r1,r2,c0,c1,c2){
+    const a=g(r0,c0),b=g(r0,c1),cc=g(r0,c2),
+          d=g(r1,c0),e=g(r1,c1),f=g(r1,c2),
+          p=g(r2,c0),q=g(r2,c1),r=g(r2,c2);
+    return a*(e*r-f*q)-b*(d*r-f*p)+cc*(d*q-e*p);
+  }
+  const cf=T5;
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++){
+    const rs=CPL[i],cs=CPL[j];
+    cf[i*4+j]=((i+j)&1?-1:1)*det3(rs[0],rs[1],rs[2],cs[0],cs[1],cs[2]);
+  }
+  const det=g(0,0)*cf[0]+g(0,1)*cf[1]+g(0,2)*cf[2]+g(0,3)*cf[3];
+  if(Math.abs(det)<1e-12)return m4Ident(o);
+  const s=1/det;
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)o[i*4+j]=cf[j*4+i]*s;
+  return o;
+}
+
+/* ================= scene graph ================= */
+function node(geo,m){return{geo,m,pos:[0,0,0],rot:[0,0,0],scale:[1,1,1],rotM:null,children:[],world:m4()};}
+function add(parent,n){parent.children.push(n);return n;}
+function mesh(parent,geo,m,o){
+  const n=node(geo,m);
+  if(o){if(o.pos)n.pos=o.pos.slice();if(o.rot)n.rot=o.rot.slice();if(o.scale)n.scale=o.scale.slice();}
+  return add(parent,n);
+}
+function mat(color,o){o=o||{};return{color,
+  spec:o.spec!==undefined?o.spec:0.2,
+  shin:o.shin!==undefined?o.shin:24,
+  alpha:o.alpha!==undefined?o.alpha:1};}
+function localMat(n,o){
+  let R;
+  if(n.rotM)R=n.rotM;else R=eulerRot(ER,n.rot[0],n.rot[1],n.rot[2]);
+  const sx=n.scale[0],sy=n.scale[1],sz=n.scale[2];
+  o[0]=R[0]*sx; o[1]=R[1]*sx; o[2]=R[2]*sx; o[3]=0;
+  o[4]=R[4]*sy; o[5]=R[5]*sy; o[6]=R[6]*sy; o[7]=0;
+  o[8]=R[8]*sz; o[9]=R[9]*sz; o[10]=R[10]*sz;o[11]=0;
+  o[12]=n.pos[0];o[13]=n.pos[1];o[14]=n.pos[2];o[15]=1;
+}
+function updateWorld(n,pm){
+  localMat(n,T3);
+  m4Mul(n.world,pm,T3);
+  for(let i=0;i<n.children.length;i++)updateWorld(n.children[i],n.world);
+}
+function worldPos(n){return[n.world[12],n.world[13],n.world[14]];}
+/* orient a unit-Y primitive (cylinder/cone) so it spans from a to b */
+function orientBetween(n,a,b,rx,rz){
+  const dx=b[0]-a[0],dy=b[1]-a[1],dz=b[2]-a[2];
+  const len=Math.hypot(dx,dy,dz);
+  n.pos[0]=(a[0]+b[0])/2;n.pos[1]=(a[1]+b[1])/2;n.pos[2]=(a[2]+b[2])/2;
+  n.scale[0]=rx;n.scale[1]=Math.max(len,1e-4);n.scale[2]=rz;
+  if(!n.rotM)n.rotM=m4();
+  if(len<1e-5){m4Ident(n.rotM);return n;}
+  const ux=dx/len,uy=dy/len,uz=dz/len;
+  const axl=Math.hypot(uz,ux); /* axis = cross((0,1,0),dir) = (uz,0,-ux) */
+  if(axl<1e-6)m4AxisAngle(n.rotM,1,0,0,uy>0?0:Math.PI);
+  else m4AxisAngle(n.rotM,uz/axl,0,-ux/axl,Math.acos(Math.min(1,Math.max(-1,uy))));
+  return n;
+}
+function tube(parent,a,b,t,m){const n=mesh(parent,cylG,m);orientBetween(n,a,b,t,t);return n;}
+
+/* ================= geometry generators ================= */
+function geoSphere(lat,lon){
+  const d=[],idx=[];
+  for(let i=0;i<=lat;i++){
+    const th=i/lat*Math.PI,st=Math.sin(th),ct=Math.cos(th);
+    for(let j=0;j<=lon;j++){
+      const ph=j/lon*2*Math.PI,x=st*Math.cos(ph),y=ct,z=st*Math.sin(ph);
+      d.push(x,y,z,x,y,z);
+    }
+  }
+  for(let i=0;i<lat;i++)for(let j=0;j<lon;j++){
+    const a=i*(lon+1)+j,b=a+lon+1;
+    idx.push(a,b,a+1,a+1,b,b+1);
+  }
+  return{data:new Float32Array(d),indices:new Uint16Array(idx)};
+}
+function geoTorus(R,r,seg,tub){ /* lies in XY plane, axis = Z */
+  const d=[],idx=[];
+  for(let i=0;i<=seg;i++){
+    const u=i/seg*2*Math.PI,cu=Math.cos(u),su=Math.sin(u);
+    for(let j=0;j<=tub;j++){
+      const v=j/tub*2*Math.PI,cv=Math.cos(v),sv=Math.sin(v);
+      const nx=cv*cu,ny=cv*su,nz=sv;
+      d.push(R*cu+r*nx,R*su+r*ny,r*nz,nx,ny,nz);
+    }
+  }
+  for(let i=0;i<seg;i++)for(let j=0;j<tub;j++){
+    const a=i*(tub+1)+j,b=a+tub+1;
+    idx.push(a,b,a+1,a+1,b,b+1);
+  }
+  return{data:new Float32Array(d),indices:new Uint16Array(idx)};
+}
+function geoCylinder(seg){ /* radius 1, y in [-0.5,0.5], capped */
+  const d=[],idx=[];
+  for(let j=0;j<=seg;j++){
+    const t=j/seg*2*Math.PI,c=Math.cos(t),s=Math.sin(t);
+    d.push(c,0.5,s,c,0,s, c,-0.5,s,c,0,s);
+  }
+  for(let j=0;j<seg;j++){const a=j*2,b=a+1,c2=a+2,d2=a+3;idx.push(a,c2,b,b,c2,d2);}
+  let base=d.length/6;
+  d.push(0,0.5,0,0,1,0);
+  for(let j=0;j<=seg;j++){const t=j/seg*2*Math.PI;d.push(Math.cos(t),0.5,Math.sin(t),0,1,0);}
+  for(let j=0;j<seg;j++)idx.push(base,base+1+j,base+2+j);
+  base=d.length/6;
+  d.push(0,-0.5,0,0,-1,0);
+  for(let j=0;j<=seg;j++){const t=j/seg*2*Math.PI;d.push(Math.cos(t),-0.5,Math.sin(t),0,-1,0);}
+  for(let j=0;j<seg;j++)idx.push(base,base+2+j,base+1+j);
+  return{data:new Float32Array(d),indices:new Uint16Array(idx)};
+}
+function geoCone(seg){ /* base radius 1 at y=-0.5, apex at y=+0.5 */
+  const d=[],idx=[],il=1/Math.SQRT2;
+  for(let j=0;j<=seg;j++){
+    const t=j/seg*2*Math.PI,c=Math.cos(t),s=Math.sin(t);
+    d.push(c,-0.5,s,c*il,il,s*il, 0,0.5,0,c*il,il,s*il);
+  }
+  for(let j=0;j<seg;j++){const a=j*2;idx.push(a,a+1,a+2);}
+  const base=d.length/6;
+  d.push(0,-0.5,0,0,-1,0);
+  for(let j=0;j<=seg;j++){const t=j/seg*2*Math.PI;d.push(Math.cos(t),-0.5,Math.sin(t),0,-1,0);}
+  for(let j=0;j<seg;j++)idx.push(base,base+2+j,base+1+j);
+  return{data:new Float32Array(d),indices:new Uint16Array(idx)};
+}
+function geoBox(){ /* unit cube centered at origin */
+  const faces=[
+    [[1,-1,-1],[1,1,-1],[1,1,1],[1,-1,1],[1,0,0]],
+    [[-1,-1,1],[-1,1,1],[-1,1,-1],[-1,-1,-1],[-1,0,0]],
+    [[-1,1,-1],[-1,1,1],[1,1,1],[1,1,-1],[0,1,0]],
+    [[-1,-1,1],[-1,-1,-1],[1,-1,-1],[1,-1,1],[0,-1,0]],
+    [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],[0,0,1]],
+    [[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1],[0,0,-1]]
+  ];
+  const d=[],idx=[];
+  faces.forEach((f,fi)=>{
+    const b=fi*4;
+    for(let v=0;v<4;v++)d.push(f[v][0]*0.5,f[v][1]*0.5,f[v][2]*0.5,f[4][0],f[4][1],f[4][2]);
+    idx.push(b,b+1,b+2,b,b+2,b+3);
+  });
+  return{data:new Float32Array(d),indices:new Uint16Array(idx)};
+}
+function geoDisc(seg){ /* radius 1 in XZ plane, normal +Y */
+  const d=[0,0,0,0,1,0],idx=[];
+  for(let j=0;j<=seg;j++){const t=j/seg*2*Math.PI;d.push(Math.cos(t),0,Math.sin(t),0,1,0);}
+  for(let j=1;j<=seg;j++)idx.push(0,j,j+1);
+  return{data:new Float32Array(d),indices:new Uint16Array(idx)};
+}
+
+/* ================= GL programs ================= */
+function compile(type,src){
+  const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error('shader: '+gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs,fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,compile(gl.VERTEX_SHADER,vs));
+  gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error('link: '+gl.getProgramInfoLog(p));
+  return p;
+}
+const progMain=program(`
+attribute vec3 aPos;
+attribute vec3 aNor;
+uniform mat4 uProj,uView,uModel;
+uniform mat3 uNMat;
+varying vec3 vN;varying vec3 vW;
+void main(){
+  vec4 w=uModel*vec4(aPos,1.0);
+  vW=w.xyz;
+  vN=uNMat*aNor;
+  gl_Position=uProj*uView*w;
+}`,`
+precision mediump float;
+varying vec3 vN;varying vec3 vW;
+uniform vec3 uColor;uniform vec3 uCam;
+uniform vec3 uLD;uniform vec3 uLC;uniform vec3 uAmb;
+uniform vec3 uFogC;uniform float uFogN;uniform float uFogF;
+uniform float uSpec;uniform float uShin;uniform float uAlpha;
+void main(){
+  vec3 N=normalize(vN);
+  vec3 L=normalize(uLD);
+  float df=max(dot(N,L),0.0);
+  vec3 amb=uAmb*(0.82+0.18*N.y);
+  vec3 V=normalize(uCam-vW);
+  vec3 H=normalize(L+V);
+  float sp=pow(max(dot(N,H),0.0),uShin)*uSpec;
+  vec3 c=uColor*(amb+uLC*df)+uLC*sp;
+  float fog=smoothstep(uFogN,uFogF,distance(uCam,vW));
+  gl_FragColor=vec4(mix(c,uFogC,fog),uAlpha);
+}`);
+const progSky=program(`
+attribute vec2 aP;
+varying vec2 vP;
+void main(){vP=aP;gl_Position=vec4(aP,0.999,1.0);}`,`
+precision mediump float;
+varying vec2 vP;
+uniform vec3 uTop;uniform vec3 uHor;
+uniform vec2 uSun;uniform float uAspect;uniform float uGlow;
+void main(){
+  float h=clamp(vP.y*0.5+0.5,0.0,1.0);
+  vec3 c=mix(uHor,uTop,pow(h,0.75));
+  vec2 d=(vP-uSun)*vec2(uAspect,1.0);
+  float r=dot(d,d);
+  c+=uGlow*(vec3(1.0,0.85,0.55)*exp(-r*22.0)*0.55+vec3(1.0,0.95,0.8)*exp(-r*160.0));
+  gl_FragColor=vec4(c,1.0);
+}`);
+const U={};
+['uProj','uView','uModel','uNMat','uColor','uCam','uLD','uLC','uAmb','uFogC','uFogN','uFogF','uSpec','uShin','uAlpha']
+  .forEach(n=>U[n]=gl.getUniformLocation(progMain,n));
+const aPos=gl.getAttribLocation(progMain,'aPos'),aNor=gl.getAttribLocation(progMain,'aNor');
+const SU={};
+['uTop','uHor','uSun','uAspect','uGlow'].forEach(n=>SU[n]=gl.getUniformLocation(progSky,n));
+const aSky=gl.getAttribLocation(progSky,'aP');
+
+const skyBuf=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,skyBuf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+
+function makeGeo(g){
+  const vbo=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,vbo);
+  gl.bufferData(gl.ARRAY_BUFFER,g.data,gl.STATIC_DRAW);
+  const ibo=gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,g.indices,gl.STATIC_DRAW);
+  return{vbo,ibo,n:g.indices.length};
+}
+
+/* ================= materials ================= */
+const M={
+  FRAME:mat([0.82,0.23,0.20],{spec:0.5,shin:32}),
+  TIRE:mat([0.15,0.15,0.17],{spec:0.18,shin:14}),
+  RIM:mat([0.72,0.75,0.79],{spec:0.7,shin:48}),
+  STEEL:mat([0.78,0.80,0.84],{spec:0.75,shin:60}),
+  SPOKE:mat([0.80,0.82,0.86],{spec:0.7,shin:60}),
+  DARK:mat([0.16,0.16,0.18],{spec:0.25,shin:16}),
+  CREAM:mat([0.965,0.945,0.90],{spec:0.12,shin:12}),
+  WING:mat([0.90,0.89,0.85],{spec:0.12,shin:12}),
+  WINGG:mat([0.76,0.75,0.72],{spec:0.1,shin:10}),
+  GRAY:mat([0.78,0.77,0.74],{spec:0.1,shin:10}),
+  THIGH:mat([0.93,0.91,0.86],{spec:0.12,shin:12}),
+  ORANGE:mat([0.90,0.50,0.14],{spec:0.3,shin:22}),
+  BEAK:mat([0.96,0.61,0.16],{spec:0.35,shin:26}),
+  BEAKD:mat([0.78,0.43,0.10],{spec:0.35,shin:26}),
+  POUCH:mat([0.94,0.53,0.19],{spec:0.3,shin:20}),
+  BLACK:mat([0.07,0.07,0.09],{spec:0.9,shin:90}),
+  GLINT:mat([1,1,1],{spec:0,shin:1}),
+  SAND:mat([0.90,0.82,0.62],{spec:0.03,shin:4}),
+  ROAD:mat([0.32,0.33,0.36],{spec:0.08,shin:8}),
+  LINE:mat([0.88,0.86,0.80],{spec:0.05,shin:4}),
+  CLOUD:mat([1,1,1],{spec:0,shin:1}),
+  SHDW:mat([0.05,0.05,0.08],{spec:0,shin:1,alpha:0.30}),
+  SHDW2:mat([0.05,0.05,0.08],{spec:0,shin:1,alpha:0.16})
+};
+
+/* ================= shared geometry ================= */
+const sphG=makeGeo(geoSphere(20,26));
+const sphLoG=makeGeo(geoSphere(12,16));
+const cylG=makeGeo(geoCylinder(18));
+const coneG=makeGeo(geoCone(18));
+const boxG=makeGeo(geoBox());
+const discG=makeGeo(geoDisc(48));
+const tireG=makeGeo(geoTorus(0.93,0.07,44,14));
+const rimG=makeGeo(geoTorus(0.855,0.026,40,10));
+const ringG=makeGeo(geoTorus(0.26,0.03,30,10));
+const cogG=makeGeo(geoTorus(0.11,0.024,24,8));
+
+/* ================= build scene ================= */
+const WHEEL_Y=1.0,REAR_X=-1.7,FRONT_X=1.7;
+const CRANK_Y=0.95,ARM=0.34;
+const BAR=[1.32,2.30],GHALF=0.55;
+const PEL=[-0.35,2.42];
+
+const root=node(null);
+
+/* ground + road */
+mesh(root,discG,M.SAND,{scale:[120,1,120]});
+mesh(root,boxG,M.ROAD,{pos:[0,0.01,0],scale:[46,0.04,2.6]});
+mesh(root,boxG,M.LINE,{pos:[0,0.04,1.22],scale:[46,0.02,0.1]});
+mesh(root,boxG,M.LINE,{pos:[0,0.04,-1.22],scale:[46,0.02,0.1]});
+const dashes=[];
+for(let i=0;i<24;i++)dashes.push(mesh(root,boxG,M.LINE,{pos:[-25.3+i*2.2,0.04,0],scale:[0.9,0.02,0.14]}));
+
+/* wheels */
+function wheel(x){
+  const w=node(null,null);w.pos=[x,WHEEL_Y,0];add(root,w);
+  mesh(w,tireG,M.TIRE);
+  mesh(w,rimG,M.RIM);
+  const hub=mesh(w,cylG,M.STEEL);orientBetween(hub,[0,0,-0.1],[0,0,0.1],0.05,0.05);
+  for(let i=0;i<12;i++){
+    const a=i/12*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
+    const sp=mesh(w,cylG,M.SPOKE);
+    orientBetween(sp,[0.09*c,0.09*s,0],[0.85*c,0.85*s,0],0.013,0.013);
+  }
+  return w;
+}
+const wheelR=wheel(REAR_X),wheelF=wheel(FRONT_X);
+mesh(wheelR,cogG,M.STEEL,{pos:[0,0,0.09]});
+
+/* frame */
+const F=M.FRAME;
+tube(root,[0,CRANK_Y,0],[-0.52,2.12,0],0.055,F);
+tube(root,[0,CRANK_Y,0],[1.36,1.60,0],0.055,F);
+tube(root,[-0.44,2.02,0],[1.25,2.05,0],0.05,F);
+tube(root,[1.36,1.60,0],[1.25,2.05,0],0.07,F);
+for(const s of[-1,1]){
+  tube(root,[1.36,1.60,0.06*s],[FRONT_X,WHEEL_Y,0.06*s],0.045,F);
+  tube(root,[0,CRANK_Y,0.06*s],[REAR_X,WHEEL_Y,0.06*s],0.04,F);
+  tube(root,[-0.46,2.00,0.05*s],[REAR_X,WHEEL_Y,0.05*s],0.035,F);
+}
+tube(root,[1.25,2.05,0],[BAR[0],BAR[1],0],0.05,F);
+tube(root,[BAR[0],BAR[1],-GHALF],[BAR[0],BAR[1],GHALF],0.045,F);
+tube(root,[BAR[0],BAR[1],-GHALF],[BAR[0],BAR[1],-0.36],0.065,M.DARK);
+tube(root,[BAR[0],BAR[1],0.36],[BAR[0],BAR[1],GHALF],0.065,M.DARK);
+const gripL=mesh(root,null,null,{pos:[BAR[0],BAR[1],-GHALF]});
+const gripR=mesh(root,null,null,{pos:[BAR[0],BAR[1],GHALF]});
+tube(root,[-0.52,2.12,0],[-0.56,2.17,0],0.035,M.STEEL);
+mesh(root,sphG,M.DARK,{pos:[-0.57,2.17,0],scale:[0.30,0.07,0.16]});
+
+/* drivetrain: crank, pedals, feet, chain */
+const crank=node(null,null);crank.pos=[0,CRANK_Y,0];add(root,crank);
+mesh(crank,ringG,M.STEEL,{pos:[0,0,0.09]});
+tube(crank,[0,0,0.09],[ARM,0,0.09],0.045,M.DARK);
+tube(crank,[0,0,-0.09],[-ARM,0,-0.09],0.045,M.DARK);
+const pedalA=mesh(crank,null,null,{pos:[ARM,-0.02,0.09]});
+const pedalB=mesh(crank,null,null,{pos:[-ARM,-0.02,-0.09]});
+for(const p of[pedalA,pedalB]){
+  mesh(p,boxG,M.DARK,{scale:[0.2,0.05,0.13]});
+  mesh(p,sphG,M.ORANGE,{pos:[0.03,0.065,0],scale:[0.16,0.05,0.10]});
+  const toe=mesh(p,coneG,M.ORANGE);
+  orientBetween(toe,[0.12,0.075,0],[0.28,0.05,0],0.05,0.035);
+}
+tube(root,[0,CRANK_Y+0.26,0.09],[REAR_X,WHEEL_Y+0.11,0.09],0.02,M.DARK);
+tube(root,[0,CRANK_Y-0.26,0.09],[REAR_X,WHEEL_Y-0.11,0.09],0.02,M.DARK);
+
+/* the pelican */
+const pel=node(null,null);pel.pos=[PEL[0],PEL[1],0];pel.rot=[0,0,-0.12];add(root,pel);
+mesh(pel,sphG,M.CREAM,{pos:[0.10,0.30,0],scale:[0.52,0.54,0.42]});   /* body */
+mesh(pel,sphG,M.WING,{pos:[0.06,0.20,0],scale:[0.44,0.44,0.36]});    /* belly */
+const tail=mesh(pel,coneG,M.GRAY);
+orientBetween(tail,[-0.30,0.50,0],[-0.72,0.78,0],0.13,0.06);
+const tailBase=tail.rotM.slice();
+const hipL=mesh(pel,null,null,{pos:[-0.05,-0.02,-0.19]});
+const hipR=mesh(pel,null,null,{pos:[-0.05,-0.02,0.19]});
+/* neck: S-curve of tube segments with joint spheres */
+const NP=[[0.32,0.55],[0.52,0.85],[0.66,1.15],[0.78,1.40],[0.84,1.52]];
+const NW=[0.17,0.15,0.13,0.11];
+for(let i=0;i<4;i++)tube(pel,[NP[i][0],NP[i][1],0],[NP[i+1][0],NP[i+1][1],0],NW[i],M.CREAM);
+for(let i=1;i<4;i++)mesh(pel,sphLoG,M.CREAM,{pos:[NP[i][0],NP[i][1],0],scale:[NW[i-1]*0.9,NW[i-1]*0.9,NW[i-1]*0.9]});
+/* head + face */
+const headA=mesh(pel,null,null,{pos:[NP[4][0],NP[4][1],0]});
+mesh(headA,sphG,M.CREAM,{scale:[0.17,0.18,0.16]});
+for(const s of[-1,1]){
+  mesh(headA,sphLoG,M.BLACK,{pos:[0.055,0.055,0.135*s],scale:[0.034,0.034,0.034]});
+  mesh(headA,sphLoG,M.GLINT,{pos:[0.08,0.08,0.148*s],scale:[0.012,0.012,0.012]});
+}
+const cr1=mesh(headA,coneG,M.WINGG);orientBetween(cr1,[-0.02,0.12,0],[-0.22,0.20,0],0.045,0.03);
+const cr2=mesh(headA,coneG,M.WINGG);orientBetween(cr2,[-0.05,0.08,-0.05],[-0.22,0.13,-0.10],0.035,0.025);
+const cr3=mesh(headA,coneG,M.WINGG);orientBetween(cr3,[-0.05,0.08,0.05],[-0.22,0.13,0.10],0.035,0.025);
+const beak=mesh(headA,coneG,M.BEAK);orientBetween(beak,[0.12,0.03,0],[1.05,-0.02,0],0.10,0.05);
+const hook=mesh(headA,coneG,M.BEAKD);orientBetween(hook,[1.02,-0.01,0],[1.14,-0.10,0],0.045,0.032);
+const pouch=mesh(headA,sphG,M.POUCH,{pos:[0.52,-0.13,0],scale:[0.40,0.19,0.12]});
+/* wings: shoulder->elbow fixed, elbow->grip updated each frame */
+const forearms=[],elbows=[];
+for(const s of[-1,1]){
+  mesh(pel,sphG,M.WING,{pos:[0.42,0.60,0.30*s],scale:[0.15,0.15,0.08]});
+  const uw=mesh(pel,cylG,M.WING);orientBetween(uw,[0.42,0.60,0.30*s],[0.95,0.55,0.44*s],0.16,0.06);
+  elbows.push(mesh(pel,sphLoG,M.WING,{pos:[0.95,0.55,0.44*s],scale:[0.13,0.10,0.06]}));
+  forearms.push(mesh(root,cylG,M.WING)); /* world-space */
+  const g=(s<0?gripL:gripR);
+  const f1=mesh(g,coneG,M.WING);orientBetween(f1,[-0.02,-0.02,0],[0.30,0.02,0.02*s],0.05,0.035);
+  const f2=mesh(g,coneG,M.WINGG);orientBetween(f2,[-0.04,-0.05,0.03*s],[0.24,-0.01,0.07*s],0.04,0.028);
+}
+/* legs (two-bone IK, solved every frame) */
+function mkLeg(){return{thigh:mesh(root,cylG,M.THIGH),shin:mesh(root,cylG,M.ORANGE),
+  knee:mesh(root,sphLoG,M.ORANGE,{scale:[0.075,0.075,0.075]})};}
+const legL=mkLeg(),legR=mkLeg();
+
+/* blob shadows */
+mesh(root,discG,M.SHDW,{pos:[REAR_X,0.056,0],scale:[1.05,1,0.24]});
+mesh(root,discG,M.SHDW,{pos:[FRONT_X,0.056,0],scale:[1.05,1,0.24]});
+mesh(root,discG,M.SHDW2,{pos:[PEL[0],0.056,0],scale:[1.5,1,0.42]});
+
+/* clouds */
+const clouds=[];
+function cloud(x,y,z,s){
+  const g=node(null,null);g.pos=[x,y,z];add(root,g);
+  mesh(g,sphLoG,M.CLOUD,{scale:[1.6*s,0.9*s,1.1*s]});
+  mesh(g,sphLoG,M.CLOUD,{pos:[1.3*s,0.18*s,0.25*s],scale:[1.1*s,0.7*s,0.85*s]});
+  mesh(g,sphLoG,M.CLOUD,{pos:[-1.25*s,0.12*s,-0.2*s],scale:[1.0*s,0.62*s,0.8*s]});
+  clouds.push(g);
+}
+cloud(-20,9.5,-13,1.2);cloud(8,11,-19,1.0);cloud(24,8.5,-6,1.1);
+cloud(-6,10.5,12,1.15);cloud(30,9.8,14,0.9);cloud(-30,8.8,16,1.0);
+
+const opaque=[],blend=[];
+(function collect(n){
+  if(n.geo)(n.m.alpha<1?blend:opaque).push(n);
+  n.children.forEach(collect);
+})(root);
+
+/* ================= lighting / environment constants ================= */
+const SUN=(function(v){const l=Math.hypot(v[0],v[1],v[2]);return[v[0]/l,v[1]/l,v[2]/l];})([0.5,0.75,0.55]);
+const LIGHTC=[0.85,0.82,0.72];
+const AMBC=[0.46,0.45,0.43];
+const HORC=[1.0,0.91,0.74];
+const TOPC=[0.36,0.62,0.86];
+
+/* ================= camera + input ================= */
+let yaw=0.55,pitch=0.30,dist=10.5,touched=false;
+const target=[0,2.2,0];
+const ptrs=new Map();
+let pinch0=0;
+function pinchDist(){
+  const ids=[...ptrs.keys()];
+  const a=ptrs.get(ids[0]),b=ptrs.get(ids[1]);
+  return Math.hypot(a[0]-b[0],a[1]-b[1]);
+}
+canvas.addEventListener('pointerdown',e=>{
+  touched=true;
+  ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+  if(ptrs.size===2)pinch0=pinchDist();
+  try{canvas.setPointerCapture(e.pointerId);}catch(_){}
+});
+canvas.addEventListener('pointermove',e=>{
+  const p=ptrs.get(e.pointerId);
+  if(!p)return;
+  const dx=e.clientX-p[0],dy=e.clientY-p[1];
+  p[0]=e.clientX;p[1]=e.clientY;
+  if(ptrs.size===1){
+    yaw-=dx*0.005;
+    pitch+=dy*0.005;
+    pitch=Math.max(0.06,Math.min(1.35,pitch));
+  }else if(ptrs.size===2){
+    const d=pinchDist();
+    if(pinch0>0&&d>0){dist*=pinch0/d;dist=Math.max(4.5,Math.min(30,dist));}
+    pinch0=d;
+  }
+});
+function ptrUp(e){ptrs.delete(e.pointerId);pinch0=0;}
+canvas.addEventListener('pointerup',ptrUp);
+canvas.addEventListener('pointercancel',ptrUp);
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();touched=true;
+  dist*=Math.exp(e.deltaY*0.0012);
+  dist=Math.max(4.5,Math.min(30,dist));
+},{passive:false});
+
+/* ================= leg IK ================= */
+function solveLeg(hipN,pedalN,L){
+  const hip=worldPos(hipN),pw=worldPos(pedalN);
+  const ax=pw[0],ay=pw[1]+0.10,az=pw[2];
+  const dx=ax-hip[0],dy=ay-hip[1];
+  const dRaw=Math.hypot(dx,dy)||1e-6;
+  const L1=0.88,L2=0.88;
+  const d=Math.min(Math.max(dRaw,Math.abs(L1-L2)+1e-4),L1+L2-1e-4);
+  const ux=dx/dRaw,uy=dy/dRaw;
+  const a=(L1*L1-L2*L2+d*d)/(2*d);
+  const h=Math.sqrt(Math.max(L1*L1-a*a,1e-8));
+  const knee=[hip[0]+ux*d-uy*h,hip[1]+uy*d+ux*h,(hip[2]+az)*0.5]; /* knee bends forward (+X) */
+  orientBetween(L.thigh,hip,knee,0.085,0.085);
+  orientBetween(L.shin,knee,[ax,ay,az],0.052,0.052);
+  L.knee.pos=knee;
+}
+
+/* ================= render helpers ================= */
+gl.enable(gl.DEPTH_TEST);
+gl.enableVertexAttribArray(aPos);
+gl.enableVertexAttribArray(aNor);
+
+function drawNode(n){
+  gl.bindBuffer(gl.ARRAY_BUFFER,n.geo.vbo);
+  gl.vertexAttribPointer(aPos,3,gl.FLOAT,false,24,0);
+  gl.vertexAttribPointer(aNor,3,gl.FLOAT,false,24,12);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,n.geo.ibo);
+  gl.uniformMatrix4fv(U.uModel,false,n.world);
+  m4Invert(INVT,n.world);
+  N3[0]=INVT[0];N3[1]=INVT[4];N3[2]=INVT[8];
+  N3[3]=INVT[1];N3[4]=INVT[5];N3[5]=INVT[9];
+  N3[6]=INVT[2];N3[7]=INVT[6];N3[8]=INVT[10];
+  gl.uniformMatrix3fv(U.uNMat,false,N3);
+  gl.uniform3fv(U.uColor,n.m.color);
+  gl.uniform1f(U.uSpec,n.m.spec);
+  gl.uniform1f(U.uShin,n.m.shin);
+  gl.uniform1f(U.uAlpha,n.m.alpha);
+  gl.drawElements(gl.TRIANGLES,n.geo.n,gl.UNSIGNED_SHORT,0);
+}
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=Math.max(1,Math.round(canvas.clientWidth*dpr));
+  const h=Math.max(1,Math.round(canvas.clientHeight*dpr));
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+}
+
+/* ================= main loop ================= */
+let last=performance.now(),t=0,crankA=0,wheelA=0;
+function tick(now){
+  const dt=Math.min((now-last)/1000,0.05);last=now;t+=dt;
+  const wC=2.0,wW=wC*2.0,speed=wW*WHEEL_Y;
+  crankA-=wC*dt;wheelA-=wW*dt;
+  crank.rot[2]=crankA;
+  pedalA.rot[2]=-crankA;pedalB.rot[2]=-crankA;
+  wheelR.rot[2]=wheelA;wheelF.rot[2]=wheelA;
+  pel.pos[1]=PEL[1]+0.035*Math.cos(2*crankA);
+  pel.pos[0]=PEL[0]+0.012*Math.sin(2*crankA+1.2);
+  headA.rot[2]=0.07*Math.sin(t*2.1);
+  rotZm(W1,0.22*Math.sin(t*3.0));
+  m4Mul(tail.rotM,W1,tailBase);
+  pouch.scale[1]=0.15+0.02*Math.sin(t*2.6);
+  for(const d of dashes){d.pos[0]-=speed*dt;if(d.pos[0]<-25.3)d.pos[0]+=52.8;}
+  for(const c of clouds){c.pos[0]-=0.5*dt;if(c.pos[0]<-36)c.pos[0]+=72;}
+  if(!touched)yaw+=dt*0.10;
+
+  updateWorld(root,IDENT);
+  /* wings + legs follow the pelican in world space */
+  for(let i=0;i<2;i++){
+    const e=worldPos(elbows[i]),g=worldPos(i===0?gripL:gripR);
+    orientBetween(forearms[i],e,g,0.13,0.05);
+  }
+  solveLeg(hipL,pedalB,legL);
+  solveLeg(hipR,pedalA,legR);
+  updateWorld(root,IDENT);
+
+  resize();
+  const aspect=canvas.width/canvas.height;
+  m4Persp(PROJ,42*Math.PI/180,aspect,0.1,250);
+  const cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const eye=[target[0]+dist*cp*Math.sin(yaw),target[1]+dist*sp,target[2]+dist*cp*Math.cos(yaw)];
+  m4LookAt(VIEW,eye,target,[0,1,0]);
+
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(1,0.91,0.74,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+
+  /* sky (fullscreen gradient, drawn first, no depth) */
+  gl.disable(gl.DEPTH_TEST);
+  gl.useProgram(progSky);
+  gl.uniform3fv(SU.uTop,TOPC);
+  gl.uniform3fv(SU.uHor,HORC);
+  m4Mul(VPm,PROJ,VIEW);
+  const sx=SUN[0]*80,sy=SUN[1]*80,sz=SUN[2]*80;
+  const cw=VPm[3]*sx+VPm[7]*sy+VPm[11]*sz+VPm[15];
+  let gx=10,gy=10,glow=0;
+  if(cw>0.1){
+    const ix=VPm[0]*sx+VPm[4]*sy+VPm[8]*sz+VPm[12];
+    const iy=VPm[1]*sx+VPm[5]*sy+VPm[9]*sz+VPm[13];
+    const nx=ix/cw,ny=iy/cw;
+    if(isFinite(nx)&&isFinite(ny)){gx=nx;gy=ny;glow=1;}
+  }
+  gl.uniform2f(SU.uSun,gx,gy);
+  gl.uniform1f(SU.uAspect,aspect);
+  gl.uniform1f(SU.uGlow,glow);
+  gl.bindBuffer(gl.ARRAY_BUFFER,skyBuf);
+  gl.enableVertexAttribArray(aSky);
+  gl.vertexAttribPointer(aSky,2,gl.FLOAT,false,0,0);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.disableVertexAttribArray(aSky);
+  gl.enable(gl.DEPTH_TEST);
+
+  /* opaque pass (re-enable main attribs: sky draw may share their indices) */
+  gl.useProgram(progMain);
+  gl.enableVertexAttribArray(aPos);
+  gl.enableVertexAttribArray(aNor);
+  gl.uniformMatrix4fv(U.uProj,false,PROJ);
+  gl.uniformMatrix4fv(U.uView,false,VIEW);
+  gl.uniform3fv(U.uCam,eye);
+  gl.uniform3fv(U.uLD,SUN);
+  gl.uniform3fv(U.uLC,LIGHTC);
+  gl.uniform3fv(U.uAmb,AMBC);
+  gl.uniform3fv(U.uFogC,HORC);
+  gl.uniform1f(U.uFogN,30);
+  gl.uniform1f(U.uFogF,85);
+  for(const n of opaque)drawNode(n);
+  /* translucent pass: blob shadows */
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  for(const n of blend)drawNode(n);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

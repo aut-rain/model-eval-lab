@@ -1,0 +1,5 @@
+[第 1 步，只做一次：用任意图像模型生成一张参考图。对比不同模型时，大家共用同一张图]
+生成一张照片：一枚以电视剧《Pluribus》为主题的 faberge 彩蛋——先做调研
+
+[第 2 步，正式测试：附上那张图，通过能运行 Blender 的编码 agent 发送。“blender 本地 skill”指事先装好的技能文件；没有的话，可以改成“用 Blender 的 Python API”]
+用你的 blender 本地 skill，基于这个 faverge 彩蛋制作一个 Blender 模型

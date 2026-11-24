@@ -1,0 +1,29 @@
+Build a complete 3D arcade racing game in ONE SINGLE HTML file using Three.js (load from CDN, no other libraries, no build tools, no external assets). IMPORTANT: Output ONLY one file: index.html
+
+- Put all HTML, CSS, and JavaScript inside this single file
+- Do not create any other files
+- Do not use React, TypeScript, or any frameworks
+- The final file must run by double-clicking index.html
+
+TRACK: A closed-loop race track built from simple geometry (a ribbon/road mesh or connected segments), with visible track boundaries so the player can tell where the drivable surface ends
+
+- At least a few curves and a couple of elevation changes or chicanes so it isn't just an oval
+- Simple scenery around the track (trees, barriers, or similar low-poly objects) so the world doesn't feel empty
+
+PLAYER CAR: Third-person chase camera that follows the car smoothly
+
+- Arcade-style driving physics: acceleration, braking, steering, and some drift/slide when turning at speed (does not need to be a full physics engine — a simplified arcade model is fine)
+- Controls: W/Up = accelerate, S/Down = brake/reverse, A/D or Left/Right = steer
+- Visual feedback for speed (camera FOV shift, motion blur, or particle trail are all acceptable — pick one)
+
+RACE: 3 AI-controlled opponent cars that follow the track using waypoints or a similar simple path-following method, at varying speeds
+
+- Lap counting: track when the player crosses the start/finish line, count laps, and finish the race after 3 laps
+- A basic position indicator (1st/2nd/3rd/4th) that updates as cars pass each other
+
+UI: HUD showing current lap (e.g. "Lap 2/3"), position, and speed
+
+- Race countdown at the start (3, 2, 1, GO)
+- End-of-race screen showing final position, with a restart button
+
+CODE: everything inside <script> and <style> tags. No explanations. No markdown. No separate files. Return only the complete index.html code, loading Three.js from a CDN script tag.

@@ -1,0 +1,4 @@
+build me an HTML page that renders a three-dimensional pelican riding a bicycle using WebGL
+
+[p5.js watercolor variant, optional second prompt]
+Use p5js to draw a watercolor of a pelican riding a bicycle

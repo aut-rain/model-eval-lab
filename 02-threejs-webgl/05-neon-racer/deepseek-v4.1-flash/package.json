@@ -1,0 +1,14 @@
+{
+  "name": "neon-racer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fullscreen synthwave racer with live vapor-trail particles — offline-ready Three.js build.",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "build": "esbuild main.js --bundle --format=iife --target=es2020 --minify --legal-comments=none --outfile=neon-racer.bundle.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0",
+    "three": "0.170.0"
+  }
+}

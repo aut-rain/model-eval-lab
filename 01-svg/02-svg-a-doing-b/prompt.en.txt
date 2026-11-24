@@ -1,0 +1,32 @@
+[30 separate prompts, one per line. Send each one on its own]
+
+Generate an SVG of a butterfly inspecting a steam engine
+Generate an SVG of a chameleon tuning a grand piano
+Generate an SVG of a crab descending a fire escape
+Generate an SVG of a dragonfly balancing a chandelier
+Generate an SVG of a flamingo repairing a telescope
+Generate an SVG of a gecko installing a satellite dish
+Generate an SVG of a giraffe assembling a grandfather clock
+Generate an SVG of a hedgehog playing an accordion
+Generate an SVG of a jellyfish piloting a Ferris wheel
+Generate an SVG of a kangaroo climbing a radio tower
+Generate an SVG of a lobster polishing a harp
+Generate an SVG of a mantis studying a sextant
+Generate an SVG of a moose conducting a carousel
+Generate an SVG of a peacock spinning a pottery wheel
+Generate an SVG of a penguin juggling chainsaws
+Generate an SVG of a porcupine pushing a lawnmower
+Generate an SVG of a rhinoceros painting a lighthouse
+Generate an SVG of a sea anemone threading a loom
+Generate an SVG of a seahorse examining a microscope
+Generate an SVG of a sloth steering an excavator
+Generate an SVG of a squid disassembling a printing press
+Generate an SVG of a starfish driving a bulldozer
+Generate an SVG of a venus flytrap swallowing a street lamp
+Generate an SVG of an armadillo lifting a drawbridge
+Generate an SVG of an elephant typing on a typewriter
+Generate an SVG of an iguana carving a totem pole
+Generate an SVG of an octopus operating a pipe organ
+Generate an SVG of an orchid supporting a pergola
+Generate an SVG of an ostrich pulling a rickshaw
+Generate an SVG of coral cleaning a ship's wheel
