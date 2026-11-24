@@ -1,0 +1,4 @@
+[Three separate prompts, one per line. Send each one on its own]
+Black Hole — gravitational lensing visualisation.
+Path Tracer — physically-correct ray-traced renderer.
+Fluid — WebGL fluid simulation with swirling particles.

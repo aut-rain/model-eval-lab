@@ -1,0 +1,4 @@
+Neon Racer — fullscreen neon racer with vapor-trail particle effects.
+
+[Same series, optional second prompt]
+Neon City — cyberpunk neon-lit city you drive through.

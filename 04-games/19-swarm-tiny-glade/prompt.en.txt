@@ -1,0 +1,2 @@
+[/swarm is the multi-agent command of Google Antigravity. Drop it if the tool you use does not support it]
+/swarm Please make an AAA game similar to Tiny Glade, using all the latest techniques for the visuals, that runs in the browser, HTML version

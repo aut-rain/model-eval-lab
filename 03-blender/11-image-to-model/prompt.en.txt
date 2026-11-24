@@ -1,0 +1,5 @@
+[Step 1, done once: get a reference image with any image model. Use the same image for every model being tested]
+Generate a photo of a faberge egg that's themed after the TV show Pluribus - research first
+
+[Step 2, the actual test: attach that image and send through a coding agent that can run Blender. "blender local skill" refers to a skill file set up beforehand; without one, say "using Blender's Python API" instead]
+Use your blender local skill to create a blender model of this faverge egg

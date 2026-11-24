@@ -1,0 +1,53 @@
+[48 prompts: 8 animals x 6 vehicles, one per line. Send each one on its own. The original study ran each prompt three times per model]
+
+Generate an SVG of a pelican riding a bicycle
+Generate an SVG of a pelican riding a unicycle
+Generate an SVG of a pelican riding a skateboard
+Generate an SVG of a pelican riding a scooter
+Generate an SVG of a pelican riding a plane
+Generate an SVG of a pelican riding a boat
+Generate an SVG of a flamingo riding a bicycle
+Generate an SVG of a flamingo riding a unicycle
+Generate an SVG of a flamingo riding a skateboard
+Generate an SVG of a flamingo riding a scooter
+Generate an SVG of a flamingo riding a plane
+Generate an SVG of a flamingo riding a boat
+Generate an SVG of a heron riding a bicycle
+Generate an SVG of a heron riding a unicycle
+Generate an SVG of a heron riding a skateboard
+Generate an SVG of a heron riding a scooter
+Generate an SVG of a heron riding a plane
+Generate an SVG of a heron riding a boat
+Generate an SVG of an otter riding a bicycle
+Generate an SVG of an otter riding a unicycle
+Generate an SVG of an otter riding a skateboard
+Generate an SVG of an otter riding a scooter
+Generate an SVG of an otter riding a plane
+Generate an SVG of an otter riding a boat
+Generate an SVG of a raccoon riding a bicycle
+Generate an SVG of a raccoon riding a unicycle
+Generate an SVG of a raccoon riding a skateboard
+Generate an SVG of a raccoon riding a scooter
+Generate an SVG of a raccoon riding a plane
+Generate an SVG of a raccoon riding a boat
+Generate an SVG of an antelope riding a bicycle
+Generate an SVG of an antelope riding a unicycle
+Generate an SVG of an antelope riding a skateboard
+Generate an SVG of an antelope riding a scooter
+Generate an SVG of an antelope riding a plane
+Generate an SVG of an antelope riding a boat
+Generate an SVG of a whale riding a bicycle
+Generate an SVG of a whale riding a unicycle
+Generate an SVG of a whale riding a skateboard
+Generate an SVG of a whale riding a scooter
+Generate an SVG of a whale riding a plane
+Generate an SVG of a whale riding a boat
+Generate an SVG of a cat riding a bicycle
+Generate an SVG of a cat riding a unicycle
+Generate an SVG of a cat riding a skateboard
+Generate an SVG of a cat riding a scooter
+Generate an SVG of a cat riding a plane
+Generate an SVG of a cat riding a boat
+
+[Another variant, from Simon Willison]
+Generate an SVG of an armadillo in fishnet tights jaywalking on Mars

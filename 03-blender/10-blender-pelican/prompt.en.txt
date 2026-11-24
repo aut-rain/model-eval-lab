@@ -1,0 +1,7 @@
+[Send through a coding agent that can run Blender. Send the three lines one at a time, in order, waiting for each result]
+
+Use the already install /Applications/Blender to render a scene of a pelican riding a bicycle
+
+OK add a background and a lot of flair
+
+OK make it a whole lot better

@@ -1,0 +1,3 @@
+[Two separate open prompts, one per line. Send each one on its own]
+Game — generic 'make a game' open prompt.
+make me a cool thing in html

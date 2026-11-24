@@ -1,0 +1,2 @@
+[Commonly quoted wording. The original was only shown in a screenshot and could not be verified word for word]
+Make a flying game in HTML, where you control an airplane with the arrow keys, and you shoot bullets at obstacles with the spacebar

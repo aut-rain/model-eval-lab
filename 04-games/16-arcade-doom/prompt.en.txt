@@ -1,0 +1,4 @@
+[Three difficulty tiers, easiest first, one per line. Send each one on its own]
+Arcade — classic arcade-style game (pick: tetris, breakout, snake).
+Raycaster Maze — build a Wolfenstein-style 3D maze you can walk through.
+Doom — put monsters in the raycaster maze and let them chase you.

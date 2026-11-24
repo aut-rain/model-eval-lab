@@ -1,0 +1,6 @@
+[Send through a coding agent. It needs access to OpenStreetMap data]
+
+Make a three js animation where yonkers stands up as a big mech (cool stand up motion) and stomps around manhattan and queens and Brooklyn, use openstreetmap mapping data
+
+[Optional follow-up, to get a version with no external dependencies]
+build that into a standalone HTML file

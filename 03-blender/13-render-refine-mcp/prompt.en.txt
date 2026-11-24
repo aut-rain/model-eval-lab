@@ -1,0 +1,14 @@
+[Follow-up to test 12. Replace {{PREVIOUS_SCRIPT}} with the complete script from that test. Attach the images in this order: first the render(s) of the current script, then the reference image(s) of the target. Can be repeated for several rounds]
+
+The attached images are ordered as follows: first 1 image(s) are renders of the CURRENT generated script, followed by 1 GT reference image(s) of the TARGET object. They depict the current reconstruction and the desired object respectively.
+
+Here is the complete current Blender script:
+
+```python
+{{PREVIOUS_SCRIPT}}
+```
+
+Compare the current renders against every GT view. Identify the largest visible geometry, proportion, placement, silhouette, or missing-part errors, then edit the script to correct them. Preserve useful detail already present. Return the COMPLETE corrected self-contained Blender Python script, not a diff. Do not use ellipsis and do not omit unchanged code. Output no prose outside the script.
+
+[Interactive variant through Blender MCP: needs the benchmark's skill file, reproduced in Section 12 of the 3DHarnessBench paper]
+Use the $blender-gt-reconstruction skill installed at .agents/skills/blender-gt-reconstruction/SKILL.md. Read SKILL.md and the access-mode reference it selects before touching Blender, then complete the GT reconstruction.

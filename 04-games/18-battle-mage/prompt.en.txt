@@ -1,0 +1,1 @@
+build a first-person battle mage game. Sword in one hand, spells in the other, enemies worth fighting, a way to win, a way to lose, and it has to start from one double-click.
